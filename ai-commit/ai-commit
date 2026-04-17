@@ -90,7 +90,7 @@ auto_install_hooks() {
   echo ""
   warn "No git hooks found in this repo."
   read -r -p "  Install commit validation hooks? [Y/n] " answer
-  if [[ "${answer,,}" != "n" ]]; then
+  if [[ "$(lower "$answer")" != "n" ]]; then
     mkdir -p "${root}/.githooks"
     cp "${hooks_source}/commit-msg" "${root}/.githooks/commit-msg"
     cp "${hooks_source}/pre-commit" "${root}/.githooks/pre-commit"
@@ -281,7 +281,7 @@ while true; do
 
   read -r -p "  > " CHOICE
 
-  case "${CHOICE,,}" in
+  case "$(lower "$CHOICE")" in
     a) handle_accept;                    break ;;
     e) handle_edit;                      break ;;
     r) warn "Regenerating..."; echo "";  continue ;;

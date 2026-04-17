@@ -3,7 +3,7 @@ set -euo pipefail
 # ── install.sh ── Development setup installer ────────────────────────────────
 #
 # Clone and run:
-#   git clone https://github.com/buun-group/development-setup.git
+#   git clone https://github.com/BuunGroup-Packages/development-setup.git
 #   cd development-setup && just install
 
 # ── Colors & helpers ─────────────────────────────────────────────────────────
@@ -21,6 +21,7 @@ success() { echo -e "${GREEN}$*${NC}"; }
 warn()    { echo -e "${YELLOW}$*${NC}"; }
 error()   { echo -e "${RED}$*${NC}" >&2; }
 dim()     { echo -e "${DIM}$*${NC}"; }
+lower()   { echo "$1" | tr '[:upper:]' '[:lower:]'; }
 
 step() { info "[$1/7] $2"; }
 
@@ -56,7 +57,7 @@ resolve_source() {
   else
     SOURCE_DIR=$(mktemp -d /tmp/dev-setup-XXXXXX)
     info "Downloading development-setup..."
-    git clone --depth 1 https://github.com/buun-group/development-setup.git "$SOURCE_DIR" 2>/dev/null \
+    git clone --depth 1 https://github.com/BuunGroup-Packages/development-setup.git "$SOURCE_DIR" 2>/dev/null \
       || { error "Failed to clone. Is git installed?"; exit 1; }
   fi
 }
@@ -75,7 +76,7 @@ check_or_install() {
     warn "  ${cmd} not found"
     dim "  ${install_msg}"
     read -r -p "  Install now? [y/N] " answer
-    if [[ "${answer,,}" == "y" ]]; then
+    if [[ "$(lower "$answer")" == "y" ]]; then
       eval "$install_cmd"
       success "  ${cmd} installed"
     else
@@ -105,7 +106,7 @@ setup_ollama() {
   else
     warn "  Ollama not found"
     read -r -p "  Install Ollama now? [y/N] " answer
-    if [[ "${answer,,}" == "y" ]]; then
+    if [[ "$(lower "$answer")" == "y" ]]; then
       info "  Downloading Ollama installer..."
       curl -fsSL https://ollama.com/install.sh | sh
       success "  Ollama installed"
@@ -170,7 +171,7 @@ ensure_path() {
 
   warn "  ${BIN_DIR} is not in your PATH"
   read -r -p "  Add to PATH in ${SHELL_RC}? [y/N] " answer
-  if [[ "${answer,,}" == "y" ]]; then
+  if [[ "$(lower "$answer")" == "y" ]]; then
     echo '' >> "$SHELL_RC"
     echo '# Added by development-setup installer' >> "$SHELL_RC"
     echo 'export PATH="${HOME}/.local/bin:${PATH}"' >> "$SHELL_RC"
@@ -242,7 +243,7 @@ build_model() {
   if ollama show "$model_name" &>/dev/null 2>&1; then
     success "  Model '${model_name}' already exists"
     read -r -p "  Rebuild with latest config? [y/N] " answer
-    if [[ "${answer,,}" == "y" ]]; then
+    if [[ "$(lower "$answer")" == "y" ]]; then
       ollama create "$model_name" -f "$modelfile" 2>/dev/null
       success "  Model rebuilt"
     fi
@@ -271,7 +272,7 @@ setup_alias() {
     success "  Alias 'gc' already exists in ${SHELL_RC}"
   else
     read -r -p "  Add 'gc' alias for ai-commit to ${SHELL_RC}? [Y/n] " answer
-    if [[ "${answer,,}" != "n" ]]; then
+    if [[ "$(lower "$answer")" != "n" ]]; then
       echo '' >> "$SHELL_RC"
       echo '# ai-commit alias — added by development-setup' >> "$SHELL_RC"
       echo 'alias gc="ai-commit"' >> "$SHELL_RC"
@@ -295,7 +296,7 @@ setup_hooks() {
   if [ -n "$current_repo" ]; then
     dim "  Current repo: $(basename "$current_repo")"
     read -r -p "  Install git hooks into this repo? [Y/n] " answer
-    if [[ "${answer,,}" != "n" ]]; then
+    if [[ "$(lower "$answer")" != "n" ]]; then
       bash "${SCRIPT_DIR}/install-hooks.sh" "$current_repo"
     else
       dim "  Skipped. Install later with: just hooks"

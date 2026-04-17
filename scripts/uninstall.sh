@@ -8,6 +8,8 @@ CYAN=$'\033[0;36m'
 BOLD=$'\033[1m'
 NC=$'\033[0m'
 
+lower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
+
 INSTALL_DIR="${HOME}/.local/share/ai-commit"
 BIN="${HOME}/.local/bin/ai-commit"
 
@@ -24,7 +26,7 @@ echo ""
 
 echo ""
 read -r -p "  Also delete Ollama 'buun-commit' model(s)? [y/N] " answer
-if [[ "${answer,,}" == "y" ]]; then
+if [[ "$(lower "$answer")" == "y" ]]; then
   for model in $(ollama list 2>/dev/null | grep -o 'buun-commit[^ ]*' || true); do
     ollama rm "$model" 2>/dev/null && echo -e "${GREEN}  Removed model: ${model}${NC}"
   done

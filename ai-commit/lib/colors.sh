@@ -32,3 +32,6 @@ menu_option() {
   local label="$2"
   echo -ne "  ${CYAN}${key}${NC} ${label}"
 }
+
+# Portable lowercase (works in bash 3, dash, sh)
+lower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }

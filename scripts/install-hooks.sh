@@ -22,6 +22,7 @@ success() { echo -e "${GREEN}$*${NC}"; }
 warn()    { echo -e "${YELLOW}$*${NC}"; }
 error()   { echo -e "${RED}$*${NC}" >&2; }
 dim()     { echo -e "${DIM}$*${NC}"; }
+lower()   { echo "$1" | tr '[:upper:]' '[:lower:]'; }
 
 # ── Parse args ───────────────────────────────────────────────────────────────
 
@@ -78,7 +79,7 @@ check_existing_hooks() {
     [ -d "${REPO_ROOT}/.husky" ] && dim "    .husky/"
     echo ""
     read -r -p "  Overwrite? [y/N] " answer
-    if [[ "${answer,,}" != "y" ]]; then
+    if [[ "$(lower "$answer")" != "y" ]]; then
       echo ""
       info "  Aborted. Existing hooks unchanged."
       exit 0
@@ -146,7 +147,7 @@ create_config() {
       echo -e "  ${CYAN}$(echo "$detected" | tr '|' ', ')${NC}"
       echo ""
       read -r -p "  Use these scopes? [Y/n] " answer
-      [[ "${answer,,}" != "n" ]] && SCOPES="$detected"
+      [[ "$(lower "$answer")" != "n" ]] && SCOPES="$detected"
     fi
 
     if [ -z "$SCOPES" ]; then
@@ -193,7 +194,7 @@ setup_prepare_script() {
   if [ -z "$existing" ]; then
     echo ""
     read -r -p "  Add 'prepare' script to package.json? (auto-enables hooks on npm install) [y/N] " answer
-    if [[ "${answer,,}" == "y" ]]; then
+    if [[ "$(lower "$answer")" == "y" ]]; then
       local tmpfile
       tmpfile=$(mktemp)
       jq ".scripts.prepare = \"${hooks_cmd}\"" "${REPO_ROOT}/package.json" > "$tmpfile"

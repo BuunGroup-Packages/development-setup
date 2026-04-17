@@ -299,7 +299,7 @@ confirm_changeset() {
   echo ""
   read -r -p "  > " cs_choice
 
-  case "${cs_choice,,}" in
+  case "$(lower "$cs_choice")" in
     u)
       # Update existing changeset
       if [ -n "$EXISTING_CHANGESET_FILE" ]; then

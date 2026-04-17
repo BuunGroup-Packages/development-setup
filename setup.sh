@@ -2,7 +2,7 @@
 set -euo pipefail
 # ── setup.sh ── One-liner bootstrap for development-setup ────────────────────
 #
-# curl -fsSL https://raw.githubusercontent.com/buun-group/development-setup/main/setup.sh | bash
+# curl -fsSL https://raw.githubusercontent.com/BuunGroup-Packages/development-setup/main/setup.sh | bash
 #
 # Installs just (if missing), clones the repo, and runs just install.
 
@@ -17,7 +17,7 @@ info()    { echo -e "${CYAN}$*${NC}"; }
 success() { echo -e "${GREEN}$*${NC}"; }
 error()   { echo -e "${RED}$*${NC}" >&2; }
 
-REPO_URL="https://github.com/buun-group/development-setup.git"
+REPO_URL="https://github.com/BuunGroup-Packages/development-setup.git"
 CLONE_DIR="${HOME}/.local/share/development-setup"
 
 echo ""
