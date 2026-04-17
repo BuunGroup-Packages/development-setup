@@ -37,7 +37,7 @@ ensure_model() {
       if echo "$create_output" | grep -qi "unsupported\|unknown\|invalid\|not found\|404"; then
         warn "Model creation failed — your Ollama may be outdated."
         local current_ver
-        current_ver=$(ollama --version 2>&1 | grep -oP '[\d.]+' || echo "unknown")
+        current_ver=$(ollama --version 2>&1 | grep -o '[0-9.]*' || echo "unknown")
         dim "  Current version: v${current_ver}"
 
         read -r -p "  Update Ollama and retry? [Y/n] " answer
@@ -45,7 +45,7 @@ ensure_model() {
           info "  Updating Ollama..."
           curl -fsSL https://ollama.com/install.sh | sh
           local new_ver
-          new_ver=$(ollama --version 2>&1 | grep -oP '[\d.]+' || echo "unknown")
+          new_ver=$(ollama --version 2>&1 | grep -o '[0-9.]*' || echo "unknown")
           success "  Ollama updated to v${new_ver}"
 
           info "  Retrying model creation..."

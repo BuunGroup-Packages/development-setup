@@ -103,7 +103,7 @@ echo ""
 setup_ollama() {
   if command -v ollama &>/dev/null; then
     local current_ver
-    current_ver=$(ollama --version 2>&1 | grep -oP '[\d.]+' || echo "unknown")
+    current_ver=$(ollama --version 2>&1 | grep -o '[0-9.]*' || echo "unknown")
     success "  Ollama installed (v${current_ver})"
 
     # Check for updates
@@ -119,7 +119,7 @@ setup_ollama() {
         info "  Updating Ollama..."
         curl -fsSL https://ollama.com/install.sh | sh
         local new_ver
-        new_ver=$(ollama --version 2>&1 | grep -oP '[\d.]+' || echo "unknown")
+        new_ver=$(ollama --version 2>&1 | grep -o '[0-9.]*' || echo "unknown")
         success "  Ollama updated to v${new_ver}"
       fi
     else
@@ -206,38 +206,115 @@ install_files
 ensure_path
 echo ""
 
-# ── Step 4: Select model profile ────────────────────────────────────────────
+# ── Step 4: Detect hardware and select model profile ────────────────────────
+
+detect_hardware() {
+  # Total RAM in GB
+  local ram_gb=0
+  if command -v free &>/dev/null; then
+    ram_gb=$(free -g 2>/dev/null | awk '/^Mem:/ {print $2}' || echo 0)
+  elif [ -f /proc/meminfo ]; then
+    ram_gb=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo)
+  elif command -v sysctl &>/dev/null; then
+    # macOS
+    local ram_bytes
+    ram_bytes=$(sysctl -n hw.memsize 2>/dev/null || echo 0)
+    ram_gb=$((ram_bytes / 1073741824))
+  fi
+
+  # VRAM in GB (nvidia)
+  local vram_gb=0
+  if command -v nvidia-smi &>/dev/null; then
+    local vram_mb
+    vram_mb=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 || echo 0)
+    vram_gb=$((vram_mb / 1024))
+  fi
+
+  # Check for Apple Silicon (unified memory = shared RAM/VRAM)
+  local apple_silicon=false
+  if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+    apple_silicon=true
+  fi
+
+  # CPU cores
+  local cpu_cores
+  cpu_cores=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 0)
+
+  echo "${ram_gb}|${vram_gb}|${apple_silicon}|${cpu_cores}"
+}
+
+recommend_profile() {
+  local ram_gb="$1"
+  local vram_gb="$2"
+  local apple_silicon="$3"
+
+  # Available memory for the model (VRAM preferred, else RAM)
+  local avail_gb="$ram_gb"
+  if [ "$vram_gb" -gt 0 ]; then
+    avail_gb="$vram_gb"
+  fi
+  # Apple Silicon shares RAM as VRAM
+  if [ "$apple_silicon" = "true" ]; then
+    avail_gb="$ram_gb"
+  fi
+
+  if [ "$avail_gb" -ge 12 ]; then
+    echo "default"
+  elif [ "$avail_gb" -ge 6 ]; then
+    echo "lite"
+  else
+    echo "tiny"
+  fi
+}
 
 select_profile() {
   local profiles_conf="${INSTALL_DIR}/models/profiles.conf"
   declare -a names=() descs=() bases=()
 
-  while IFS='|' read -r profile base_model temp predict ctx desc; do
+  while IFS='|' read -r profile base_model temp predict ctx min_f desc; do
     [[ "$profile" =~ ^#.*$ || -z "$profile" ]] && continue
     names+=("$profile")
     descs+=("$desc")
     bases+=("$base_model")
   done < "$profiles_conf"
 
+  # Detect hardware
+  local hw_info ram_gb vram_gb apple_silicon cpu_cores
+  hw_info=$(detect_hardware)
+  IFS='|' read -r ram_gb vram_gb apple_silicon cpu_cores <<< "$hw_info"
+
+  dim "  Hardware detected:"
+  dim "    RAM: ${ram_gb}GB  CPU: ${cpu_cores} cores"
+  [ "$vram_gb" -gt 0 ] && dim "    GPU VRAM: ${vram_gb}GB"
+  [ "$apple_silicon" = "true" ] && dim "    Apple Silicon (unified memory)"
+  echo ""
+
+  # Get recommendation
+  local recommended
+  recommended=$(recommend_profile "$ram_gb" "$vram_gb" "$apple_silicon")
+  local rec_idx=0
+
   for i in "${!names[@]}"; do
-    if [ "${names[$i]}" = "default" ]; then
-      echo -e "    ${CYAN}$((i+1))${NC}) ${BOLD}${names[$i]}${NC}  ${DIM}${descs[$i]}${NC}"
-    else
-      echo -e "    ${CYAN}$((i+1))${NC}) ${names[$i]}  ${DIM}${descs[$i]}${NC}"
+    local marker=""
+    if [ "${names[$i]}" = "$recommended" ]; then
+      marker=" ${GREEN}<-- recommended${NC}"
+      rec_idx=$((i + 1))
     fi
+
+    echo -e "    ${CYAN}$((i+1))${NC}) ${BOLD}${names[$i]}${NC}  ${DIM}${descs[$i]}${NC}${marker}"
   done
 
   echo ""
-  read -r -p "  Choose profile [1]: " choice
-  choice="${choice:-1}"
+  read -r -p "  Choose profile [${rec_idx}]: " choice
+  choice="${choice:-${rec_idx}}"
 
   if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#names[@]}" ]; then
     SELECTED_PROFILE="${names[$((choice-1))]}"
     SELECTED_BASE="${bases[$((choice-1))]}"
   else
-    warn "  Invalid choice, using default"
-    SELECTED_PROFILE="default"
-    SELECTED_BASE="${bases[0]}"
+    warn "  Invalid choice, using recommended"
+    SELECTED_PROFILE="$recommended"
+    SELECTED_BASE="${bases[$((rec_idx-1))]}"
   fi
 
   success "  Selected: ${SELECTED_PROFILE}"

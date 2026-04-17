@@ -105,12 +105,13 @@ The hooks auto-detect scopes from your `apps/` and `packages/` directories durin
 
 Ollama models are created as `buun-commit-<profile>`. The installer lets you pick a profile. Switch anytime:
 
-| Profile   | Base Model     | Context | Best for                        |
-|-----------|----------------|---------|----------------------------------|
-| `default` | gemma4 8B      | 8K      | Balanced speed and quality       |
-| `small`   | gemma3 4B      | 4K      | Fast, lower resource usage       |
-| `qwen`    | qwen3 8B       | 8K      | Alternative model                |
-| `large`   | gemma4 8B      | 32K     | Huge diffs, monorepos            |
+| Profile   | Base Model     | Size   | RAM    | Best for                              |
+|-----------|----------------|--------|--------|---------------------------------------|
+| `default` | gemma4 12B     | 9.6GB  | 12GB+  | Balanced speed and quality            |
+| `lite`    | gemma4 e4b MoE | 3.3GB  | 6GB+   | Laptops with 8-16GB RAM              |
+| `tiny`    | gemma4 e2b MoE | 1.8GB  | 4GB+   | Minimal resources, may hallucinate    |
+| `qwen`    | qwen3 8B       | 4.9GB  | 8GB+   | Alternative model                     |
+| `large`   | gemma4 12B     | 9.6GB  | 12GB+  | Max context window for huge diffs     |
 
 Switch profile per-command:
 ```bash

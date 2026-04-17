@@ -207,7 +207,7 @@ preview_changeset() {
 
   # Determine bump type
   local commit_type bump
-  commit_type=$(echo "$commit_msg" | head -1 | grep -oP '^[a-z]+' || echo "chore")
+  commit_type=$(echo "$commit_msg" | head -1 | grep -o '^[a-z]*' || echo "chore")
 
   if is_breaking_change "$commit_msg"; then
     bump="major"

@@ -52,7 +52,7 @@ rebuild:
     #!/usr/bin/env bash
     set -euo pipefail
     bash ai-commit/models/build.sh
-    while IFS='|' read -r profile base temp predict ctx desc; do
+    while IFS='|' read -r profile base temp predict ctx min_f desc; do
         [[ "$profile" =~ ^#.*$ || -z "$profile" ]] && continue
         if [ "$profile" = "default" ]; then
             name="buun-commit"

@@ -44,7 +44,7 @@ get_recent_log() {
 
 get_recent_scopes() {
   git log --oneline --no-decorate -n 50 2>/dev/null \
-    | grep -oP '^\w+ \w+\(\K[^)]+' \
+    | sed -n 's/^[^ ]* [a-z]*(\([^)]*\)).*/\1/p' \
     | sort -u \
     | tr '\n' ', ' \
     | sed 's/,$//' || true

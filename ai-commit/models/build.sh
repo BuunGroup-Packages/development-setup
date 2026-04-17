@@ -27,7 +27,7 @@ PROMPT_CONTENT=$(cat "$SYSTEM_PROMPT")
 list_profiles() {
   echo "Available profiles:"
   echo ""
-  while IFS='|' read -r profile base_model temp predict ctx desc; do
+  while IFS='|' read -r profile base_model temp predict ctx min_f desc; do
     [[ "$profile" =~ ^#.*$ || -z "$profile" ]] && continue
     printf "  %-10s  %-20s  %s\n" "$profile" "$base_model" "$desc"
   done < "$PROFILES_CONF"
@@ -67,7 +67,7 @@ REQUESTED=("$@")
 
 mkdir -p "$OUTPUT_DIR"
 
-while IFS='|' read -r profile base_model temp predict ctx desc; do
+while IFS='|' read -r profile base_model temp predict ctx min_f desc; do
   [[ "$profile" =~ ^#.*$ || -z "$profile" ]] && continue
 
   # If specific profiles requested, skip others
