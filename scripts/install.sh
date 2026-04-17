@@ -102,7 +102,29 @@ echo ""
 
 setup_ollama() {
   if command -v ollama &>/dev/null; then
-    success "  Ollama already installed"
+    local current_ver
+    current_ver=$(ollama --version 2>&1 | grep -oP '[\d.]+' || echo "unknown")
+    success "  Ollama installed (v${current_ver})"
+
+    # Check for updates
+    local latest_ver
+    latest_ver=$(curl -s --max-time 5 https://api.github.com/repos/ollama/ollama/releases/latest 2>/dev/null \
+      | jq -r '.tag_name // empty' 2>/dev/null \
+      | sed 's/^v//' || true)
+
+    if [ -n "$latest_ver" ] && [ "$latest_ver" != "$current_ver" ]; then
+      warn "  Update available: v${current_ver} -> v${latest_ver}"
+      read -r -p "  Update Ollama now? [Y/n] " answer
+      if [[ "$(lower "$answer")" != "n" ]]; then
+        info "  Updating Ollama..."
+        curl -fsSL https://ollama.com/install.sh | sh
+        local new_ver
+        new_ver=$(ollama --version 2>&1 | grep -oP '[\d.]+' || echo "unknown")
+        success "  Ollama updated to v${new_ver}"
+      fi
+    else
+      dim "  Latest version"
+    fi
   else
     warn "  Ollama not found"
     read -r -p "  Install Ollama now? [y/N] " answer

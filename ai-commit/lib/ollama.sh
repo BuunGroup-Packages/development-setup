@@ -27,11 +27,42 @@ ensure_model() {
 
   if ! ollama show "$model" &>/dev/null; then
     info "Model '${model}' not found. Creating from Modelfile..."
-    if ollama create "$model" -f "$modelfile" &>/dev/null; then
+    local create_output
+    create_output=$(ollama create "$model" -f "$modelfile" 2>&1)
+
+    if [ $? -eq 0 ]; then
       success "Model '${model}' created."
     else
-      error "Failed to create model '${model}'."
-      exit 1
+      # Check if failure is due to outdated Ollama
+      if echo "$create_output" | grep -qi "unsupported\|unknown\|invalid\|not found\|404"; then
+        warn "Model creation failed — your Ollama may be outdated."
+        local current_ver
+        current_ver=$(ollama --version 2>&1 | grep -oP '[\d.]+' || echo "unknown")
+        dim "  Current version: v${current_ver}"
+
+        read -r -p "  Update Ollama and retry? [Y/n] " answer
+        if [[ "$(lower "$answer")" != "n" ]]; then
+          info "  Updating Ollama..."
+          curl -fsSL https://ollama.com/install.sh | sh
+          local new_ver
+          new_ver=$(ollama --version 2>&1 | grep -oP '[\d.]+' || echo "unknown")
+          success "  Ollama updated to v${new_ver}"
+
+          info "  Retrying model creation..."
+          if ollama create "$model" -f "$modelfile" &>/dev/null; then
+            success "Model '${model}' created."
+          else
+            error "Still failed. Check the Modelfile or base model."
+            exit 1
+          fi
+        else
+          exit 1
+        fi
+      else
+        error "Failed to create model '${model}'."
+        dim "  ${create_output}"
+        exit 1
+      fi
     fi
   fi
 }
