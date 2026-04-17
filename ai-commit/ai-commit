@@ -242,6 +242,26 @@ handle_accept() {
   do_commit "$COMMIT_MSG"
 }
 
+handle_accept_and_push() {
+  confirm_changeset "$REPO_ROOT"
+  do_commit "$COMMIT_MSG"
+
+  local remote_branch
+  remote_branch=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || true)
+
+  if [ -n "$remote_branch" ]; then
+    info "Pushing to ${remote_branch}..."
+  else
+    info "Pushing ${BRANCH} to origin..."
+  fi
+
+  if git push -u origin "$BRANCH" 2>&1; then
+    success "Pushed!"
+  else
+    error "Push failed. You can push manually: git push -u origin ${BRANCH}"
+  fi
+}
+
 handle_edit() {
   local tmpfile
   tmpfile=$(mktemp /tmp/ai-commit-edit-XXXXXX.gitcommit)
@@ -271,9 +291,10 @@ while true; do
 
   # Menu
   menu_option "a" "accept & commit    "
-  menu_option "e" "edit first    "
-  menu_option "r" "regenerate"
+  menu_option "p" "accept, commit & push ${DIM}(${BRANCH})${NC}    "
+  menu_option "e" "edit first"
   echo ""
+  menu_option "r" "regenerate         "
   menu_option "c" "copy to clipboard   "
   menu_option "q" "quit (no commit)"
   echo ""
@@ -283,6 +304,7 @@ while true; do
 
   case "$(lower "$CHOICE")" in
     a) handle_accept;                    break ;;
+    p) handle_accept_and_push;           break ;;
     e) handle_edit;                      break ;;
     r) warn "Regenerating..."; echo "";  continue ;;
     c) copy_to_clipboard "$COMMIT_MSG";  break ;;
