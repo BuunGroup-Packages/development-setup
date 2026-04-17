@@ -15,7 +15,7 @@
 One command - installs `just`, clones the repo, and runs the full setup:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/buun-group/development-setup/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/BuunGroup-Packages/development-setup/main/setup.sh | bash
 ```
 
 Or if you prefer to clone manually:
