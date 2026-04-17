@@ -1,0 +1,39 @@
+# Git hooks configuration
+# Copy this to .githooks.conf in your repo root and customize.
+# The hooks read this file at runtime to adapt to your project.
+
+# ── commit-msg ────────────────────────────────────────────────
+# Conventional commit types (pipe-separated)
+COMMIT_TYPES="feat|fix|perf|chore|docs|refactor|test|ci|build|style"
+
+# Allowed scopes (pipe-separated, leave empty to allow any)
+# Derive from your monorepo structure: apps, packages, infra, etc.
+COMMIT_SCOPES=""
+
+# Max subject line length
+COMMIT_MAX_LENGTH=100
+
+# Require scope? (true = must have scope, false = optional)
+COMMIT_REQUIRE_SCOPE=false
+
+# Warn on uppercase description? (non-blocking)
+COMMIT_WARN_UPPERCASE=true
+
+# ── pre-commit ────────────────────────────────────────────────
+# Forbidden file patterns (pipe-separated regex)
+# Files matching these patterns cannot be committed
+FORBIDDEN_FILES='\.env$|\.dev\.vars$|credentials\.json$|\.pem$|\.key$|\.p12$'
+
+# Debug artifact patterns (pipe-separated regex)
+# Local dev files that should never be committed
+DEBUG_ARTIFACTS='\.sqlite$|\.sqlite-shm$|\.sqlite-wal$|\.wrangler/'
+
+# Warn on console.log in these file extensions (pipe-separated)
+# Set to empty to disable
+CONSOLE_LOG_EXTENSIONS='ts|tsx|js|jsx'
+
+# Files/patterns to exclude from console.log check (pipe-separated)
+CONSOLE_LOG_EXCLUDE='\.test\.|node_modules|error-handler'
+
+# Guard patterns that make console.log acceptable (pipe-separated)
+CONSOLE_LOG_GUARDS='development|eslint-disable|APP_ENV|DEBUG'

@@ -1,0 +1,293 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# ── ai-commit ── AI-powered conventional commit message generator ────────────
+#
+# Usage:
+#   ai-commit                                  # default profile
+#   OLLAMA_COMMIT_PROFILE=large ai-commit      # override profile
+#   OLLAMA_COMMIT_MODEL=gemma4:latest ai-commit # override model directly
+
+# ── Config ───────────────────────────────────────────────────────────────────
+
+PROFILE="${OLLAMA_COMMIT_PROFILE:-default}"
+OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
+MAX_DIFF_LINES=300
+MAX_LOG_ENTRIES=15
+
+# ── Resolve paths ────────────────────────────────────────────────────────────
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -d "${HOME}/.local/share/ai-commit/lib" ]; then
+  INSTALL_DIR="${HOME}/.local/share/ai-commit"
+elif [ -d "${SCRIPT_DIR}/lib" ]; then
+  INSTALL_DIR="${SCRIPT_DIR}"
+else
+  echo "Error: Cannot find ai-commit lib directory." >&2
+  exit 1
+fi
+
+LIB_DIR="${INSTALL_DIR}/lib"
+
+# ── Resolve model profile ───────────────────────────────────────────────────
+
+if [ -z "${OLLAMA_COMMIT_PROFILE:-}" ] && [ -f "${INSTALL_DIR}/.profile" ]; then
+  PROFILE=$(cat "${INSTALL_DIR}/.profile")
+fi
+
+if [ "$PROFILE" = "default" ]; then
+  MODEL="${OLLAMA_COMMIT_MODEL:-buun-commit}"
+else
+  MODEL="${OLLAMA_COMMIT_MODEL:-buun-commit-${PROFILE}}"
+fi
+
+MODELFILE="${INSTALL_DIR}/models/generated/${PROFILE}.modelfile"
+
+# Resolve base model name and min_files from profiles.conf
+BASE_MODEL=""
+MIN_FILES=0
+if [ -f "${INSTALL_DIR}/models/profiles.conf" ]; then
+  while IFS='|' read -r p base temp predict ctx min_f desc; do
+    [[ "$p" =~ ^#.*$ || -z "$p" ]] && continue
+    if [ "$p" = "$PROFILE" ]; then
+      BASE_MODEL="$base"
+      MIN_FILES="${min_f:-0}"
+      break
+    fi
+  done < "${INSTALL_DIR}/models/profiles.conf"
+fi
+
+# ── Source libraries ─────────────────────────────────────────────────────────
+
+source "${LIB_DIR}/colors.sh"
+source "${LIB_DIR}/git.sh"
+source "${LIB_DIR}/ollama.sh"
+source "${LIB_DIR}/commit.sh"
+source "${LIB_DIR}/changeset.sh"
+
+# ── Preflight checks ────────────────────────────────────────────────────────
+
+require_jq
+require_ollama
+require_git_repo
+ensure_model "$MODEL" "$MODELFILE"
+
+# ── Auto-install hooks if missing ────────────────────────────────────────────
+
+auto_install_hooks() {
+  local root
+  root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+  [ -z "$root" ] && return 0
+
+  # Skip if hooks already exist (any style)
+  [ -d "${root}/.githooks" ] && return 0
+  [ -d "${root}/.husky" ] && return 0
+
+  # Skip if no hook templates installed
+  local hooks_source="${INSTALL_DIR}/hooks"
+  [ -d "$hooks_source" ] || return 0
+
+  echo ""
+  warn "No git hooks found in this repo."
+  read -r -p "  Install commit validation hooks? [Y/n] " answer
+  if [[ "${answer,,}" != "n" ]]; then
+    mkdir -p "${root}/.githooks"
+    cp "${hooks_source}/commit-msg" "${root}/.githooks/commit-msg"
+    cp "${hooks_source}/pre-commit" "${root}/.githooks/pre-commit"
+    chmod +x "${root}/.githooks/commit-msg" "${root}/.githooks/pre-commit"
+    git config core.hooksPath .githooks
+
+    # Auto-detect scopes for config
+    if [ ! -f "${root}/.githooks.conf" ]; then
+      local scopes=""
+      for dir_type in apps packages; do
+        if [ -d "${root}/${dir_type}" ]; then
+          for dir in "${root}/${dir_type}"/*/; do
+            [ -d "$dir" ] && scopes+="$(basename "$dir")|"
+          done
+        fi
+      done
+      scopes="${scopes%|}"
+
+      cat > "${root}/.githooks.conf" <<HOOKEOF
+# Git hooks configuration — installed by ai-commit
+COMMIT_TYPES="feat|fix|perf|chore|docs|refactor|test|ci|build|style"
+COMMIT_SCOPES="${scopes}"
+COMMIT_MAX_LENGTH=100
+COMMIT_REQUIRE_SCOPE=false
+COMMIT_WARN_UPPERCASE=true
+FORBIDDEN_FILES='\.env$|\.dev\.vars$|credentials\.json$|\.pem$|\.key$|\.p12$'
+DEBUG_ARTIFACTS='\.sqlite$|\.sqlite-shm$|\.sqlite-wal$|\.wrangler/'
+CONSOLE_LOG_EXTENSIONS='ts|tsx|js|jsx'
+CONSOLE_LOG_EXCLUDE='\.test\.|node_modules|error-handler'
+CONSOLE_LOG_GUARDS='development|eslint-disable|APP_ENV|DEBUG'
+HOOKEOF
+    fi
+
+    success "  Hooks installed to .githooks/"
+    [ -n "$scopes" ] && dim "  Scopes: $(echo "$scopes" | tr '|' ', ')"
+    echo ""
+  fi
+}
+
+auto_install_hooks
+
+STATS_START_TIME=$(date +%s)
+
+# ── Gather context ───────────────────────────────────────────────────────────
+
+gather_context() {
+  dim "  Model: ${MODEL} [${BASE_MODEL:-unknown}] (profile: ${PROFILE})"
+  info "Gathering repo context..."
+
+  REPO_ROOT=$(get_repo_root)
+
+  dim "  Reading staged diff..."
+  STAGED_STAT=$(require_staged_changes)
+  STAGED_DIFF=$(get_staged_diff)
+
+  dim "  Reading commit history..."
+  RECENT_LOG=$(get_recent_log)
+
+  CHANGED_FILES=$(get_staged_files)
+  FILE_COUNT=$(echo "$CHANGED_FILES" | wc -l)
+  BRANCH=$(get_branch)
+  REPO_NAME=$(get_repo_name)
+
+  dim "  Detecting commit conventions..."
+  REPO_RULES=$(detect_conventions "$REPO_ROOT")
+  RECENT_SCOPES=$(get_recent_scopes)
+}
+
+show_staged_files() {
+  echo ""
+  success "Staged files (${FILE_COUNT}):"
+  echo "$CHANGED_FILES" | head -20 | while read -r f; do dim "  $f"; done
+  [ "$FILE_COUNT" -gt 20 ] && dim "  ... and $((FILE_COUNT - 20)) more"
+
+  if [ "$MIN_FILES" -gt 0 ] && [ "$FILE_COUNT" -lt "$MIN_FILES" ]; then
+    echo ""
+    warn "  Warning: ${BASE_MODEL} (<8B) may hallucinate on small diffs (${FILE_COUNT} file(s))."
+    warn "  For best results use: OLLAMA_COMMIT_PROFILE=default gc"
+  fi
+  echo ""
+}
+
+# ── Build prompt ─────────────────────────────────────────────────────────────
+
+build_prompt() {
+  local rules_section=""
+  [ -n "$REPO_RULES" ] && rules_section="Repository commit conventions:"$'\n'"${REPO_RULES}"
+  [ -n "$RECENT_SCOPES" ] && rules_section+=$'\n'"Scopes used in recent commits: ${RECENT_SCOPES}"
+
+  cat <<EOF
+Repository: ${REPO_NAME}
+Branch: ${BRANCH}
+${rules_section}
+
+Recent commits:
+${RECENT_LOG}
+
+Staged files:
+${CHANGED_FILES}
+
+Diff summary:
+${STAGED_STAT}
+
+Diff (truncated):
+${STAGED_DIFF}
+
+Write the commit message now. Start with the type keyword.
+EOF
+}
+
+# ── Generate commit message ──────────────────────────────────────────────────
+
+generate_message() {
+  info "Sending to ${MODEL} via Ollama..."
+
+  local gen_start response
+  gen_start=$(date +%s)
+  response=$(call_ollama "$MODEL" "$(build_prompt)")
+  load_token_stats
+
+  STATS_GENERATION_SECS=$(( $(date +%s) - gen_start ))
+
+  COMMIT_MSG=$(clean_response "$response")
+
+  if [ -z "$COMMIT_MSG" ]; then
+    error "Could not extract a commit message."
+    warn "Raw output:"
+    echo "$response"
+    exit 1
+  fi
+}
+
+# ── Display results ──────────────────────────────────────────────────────────
+
+show_results() {
+  echo ""
+  divider
+  echo -e "${BOLD}${COMMIT_MSG}${NC}"
+  divider
+  validate_commit_msg "$COMMIT_MSG"
+  preview_changeset "$REPO_ROOT" "$COMMIT_MSG" "$CHANGED_FILES"
+  echo ""
+}
+
+# ── User menu ────────────────────────────────────────────────────────────────
+
+handle_accept() {
+  confirm_changeset "$REPO_ROOT"
+  do_commit "$COMMIT_MSG"
+}
+
+handle_edit() {
+  local tmpfile
+  tmpfile=$(mktemp /tmp/ai-commit-edit-XXXXXX.gitcommit)
+  printf '%s\n' "$COMMIT_MSG" > "$tmpfile"
+  ${EDITOR:-vim} "$tmpfile"
+
+  local edited_msg
+  edited_msg=$(cat "$tmpfile")
+  rm -f "$tmpfile"
+
+  if [ -n "$edited_msg" ]; then
+    preview_changeset "$REPO_ROOT" "$edited_msg" "$CHANGED_FILES"
+    confirm_changeset "$REPO_ROOT"
+    do_commit "$edited_msg"
+  else
+    error "Empty message, commit aborted."
+  fi
+}
+
+# ── Main loop ────────────────────────────────────────────────────────────────
+
+while true; do
+  gather_context
+  show_staged_files
+  generate_message
+  show_results
+
+  # Menu
+  menu_option "a" "accept & commit    "
+  menu_option "e" "edit first    "
+  menu_option "r" "regenerate"
+  echo ""
+  menu_option "c" "copy to clipboard   "
+  menu_option "q" "quit (no commit)"
+  echo ""
+  echo ""
+
+  read -r -p "  > " CHOICE
+
+  case "${CHOICE,,}" in
+    a) handle_accept;                    break ;;
+    e) handle_edit;                      break ;;
+    r) warn "Regenerating..."; echo "";  continue ;;
+    c) copy_to_clipboard "$COMMIT_MSG";  break ;;
+    *) error "No commit made.";          break ;;
+  esac
+done
+
+show_session_stats
