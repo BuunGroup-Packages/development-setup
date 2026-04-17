@@ -21,7 +21,7 @@ curl -fsSL https://raw.githubusercontent.com/BuunGroup-Packages/development-setu
 Or if you prefer to clone manually:
 
 ```bash
-git clone https://github.com/buun-group/development-setup.git
+git clone https://github.com/BuunGroup-Packages/development-setup.git
 cd development-setup
 just install
 ```
