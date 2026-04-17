@@ -1,0 +1,101 @@
+#!/bin/sh
+# Conventional Commits validation hook
+# Installed by development-setup — reads config from .githooks.conf
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(head -1 "$COMMIT_MSG_FILE")
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+
+# ── Load config ──────────────────────────────────────────────
+COMMIT_TYPES="feat|fix|perf|chore|docs|refactor|test|ci|build|style"
+COMMIT_SCOPES=""
+COMMIT_MAX_LENGTH=100
+COMMIT_REQUIRE_SCOPE=false
+COMMIT_WARN_UPPERCASE=true
+
+if [ -f "${REPO_ROOT}/.githooks.conf" ]; then
+  . "${REPO_ROOT}/.githooks.conf"
+fi
+
+# ── Allow merge / revert commits ─────────────────────────────
+if echo "$COMMIT_MSG" | grep -Eq "^(Merge|Revert|revert:) "; then
+  exit 0
+fi
+
+# ── Build validation pattern ─────────────────────────────────
+# Scopes support comma-separated values: feat(api,app): description
+if [ -n "$COMMIT_SCOPES" ]; then
+  SCOPE_PATTERN="(${COMMIT_SCOPES})(,(${COMMIT_SCOPES}))*"
+  if [ "$COMMIT_REQUIRE_SCOPE" = "true" ]; then
+    PATTERN="^(${COMMIT_TYPES})!?\(${SCOPE_PATTERN}\): .{1,${COMMIT_MAX_LENGTH}}$"
+  else
+    PATTERN="^(${COMMIT_TYPES})!?(\(${SCOPE_PATTERN}\))?: .{1,${COMMIT_MAX_LENGTH}}$"
+  fi
+else
+  if [ "$COMMIT_REQUIRE_SCOPE" = "true" ]; then
+    PATTERN="^(${COMMIT_TYPES})!?\([a-z0-9,-]+\): .{1,${COMMIT_MAX_LENGTH}}$"
+  else
+    PATTERN="^(${COMMIT_TYPES})!?(\([a-z0-9,-]+\))?: .{1,${COMMIT_MAX_LENGTH}}$"
+  fi
+fi
+
+# ── Validate ─────────────────────────────────────────────────
+if ! echo "$COMMIT_MSG" | grep -Eq "$PATTERN"; then
+  echo ""
+  echo "  \033[31mERROR:\033[0m Invalid commit message format."
+  echo ""
+  echo "  Got:      $COMMIT_MSG"
+  echo ""
+
+  if [ "$COMMIT_REQUIRE_SCOPE" = "true" ]; then
+    echo "  Expected: <type>(<scope>): <description>"
+  else
+    echo "  Expected: <type>(<scope>): <description>"
+    echo "            <type>: <description>"
+  fi
+  echo ""
+
+  echo "  \033[1mTypes:\033[0m"
+  echo "$COMMIT_TYPES" | tr '|' '\n' | while read -r t; do
+    case "$t" in
+      feat)     printf "    %-10s %s\n" "$t" "New feature (minor release)" ;;
+      fix)      printf "    %-10s %s\n" "$t" "Bug fix (patch release)" ;;
+      perf)     printf "    %-10s %s\n" "$t" "Performance improvement (patch release)" ;;
+      chore)    printf "    %-10s %s\n" "$t" "Maintenance (no release)" ;;
+      docs)     printf "    %-10s %s\n" "$t" "Documentation (no release)" ;;
+      refactor) printf "    %-10s %s\n" "$t" "Code restructuring (no release)" ;;
+      test)     printf "    %-10s %s\n" "$t" "Tests (no release)" ;;
+      ci)       printf "    %-10s %s\n" "$t" "CI/CD (no release)" ;;
+      build)    printf "    %-10s %s\n" "$t" "Build system (no release)" ;;
+      style)    printf "    %-10s %s\n" "$t" "Formatting (no release)" ;;
+      *)        printf "    %-10s\n" "$t" ;;
+    esac
+  done
+  echo ""
+
+  if [ -n "$COMMIT_SCOPES" ]; then
+    echo "  \033[1mScopes:\033[0m $(echo "$COMMIT_SCOPES" | tr '|' ', ')"
+    echo ""
+  fi
+
+  echo "  \033[1mBreaking changes:\033[0m Add ! after type: feat!: or fix!:"
+  echo ""
+  echo "  \033[1mExamples:\033[0m"
+  echo "    feat(api): add deployment tracking endpoints"
+  echo "    fix(app): correct SSO redirect URL"
+  echo "    chore: upgrade dependencies"
+  echo ""
+  exit 1
+fi
+
+# ── Warn on uppercase description ────────────────────────────
+if [ "$COMMIT_WARN_UPPERCASE" = "true" ]; then
+  DESC=$(echo "$COMMIT_MSG" | sed 's/^[^:]*: //')
+  FIRST_CHAR=$(echo "$DESC" | cut -c1)
+  if echo "$FIRST_CHAR" | grep -q '[A-Z]'; then
+    echo ""
+    echo "  \033[33mWARNING:\033[0m Commit description should start with lowercase."
+    echo "  Got: $DESC"
+    echo ""
+  fi
+fi

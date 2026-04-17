@@ -1,0 +1,89 @@
+#!/bin/sh
+# Pre-commit safety checks
+# Installed by development-setup — reads config from .githooks.conf
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+
+# ── Load config ──────────────────────────────────────────────
+FORBIDDEN_FILES='\.env$|\.dev\.vars$|credentials\.json$|\.pem$|\.key$|\.p12$'
+DEBUG_ARTIFACTS='\.sqlite$|\.sqlite-shm$|\.sqlite-wal$|\.wrangler/'
+CONSOLE_LOG_EXTENSIONS='ts|tsx|js|jsx'
+CONSOLE_LOG_EXCLUDE='\.test\.|node_modules|error-handler'
+CONSOLE_LOG_GUARDS='development|eslint-disable|APP_ENV|DEBUG'
+
+if [ -f "${REPO_ROOT}/.githooks.conf" ]; then
+  . "${REPO_ROOT}/.githooks.conf"
+fi
+
+STAGED_FILES=$(git diff --cached --name-only)
+EXIT_CODE=0
+
+# ── Check for sensitive files ────────────────────────────────
+if [ -n "$FORBIDDEN_FILES" ]; then
+  MATCHES=$(echo "$STAGED_FILES" | grep -E "$FORBIDDEN_FILES" || true)
+  if [ -n "$MATCHES" ]; then
+    echo ""
+    echo "  \033[31mERROR:\033[0m Attempted to commit sensitive files:"
+    echo ""
+    echo "$MATCHES" | while read -r f; do
+      echo "    - $f"
+    done
+    echo ""
+    echo "  Remove from staging: git reset HEAD <file>"
+    echo ""
+    EXIT_CODE=1
+  fi
+fi
+
+# ── Check for debug artifacts ────────────────────────────────
+if [ -n "$DEBUG_ARTIFACTS" ]; then
+  MATCHES=$(echo "$STAGED_FILES" | grep -E "$DEBUG_ARTIFACTS" || true)
+  if [ -n "$MATCHES" ]; then
+    echo ""
+    echo "  \033[31mERROR:\033[0m Attempted to commit local dev artifacts:"
+    echo ""
+    echo "$MATCHES" | while read -r f; do
+      echo "    - $f"
+    done
+    echo ""
+    echo "  These should be in .gitignore. Remove from staging: git reset HEAD <file>"
+    echo ""
+    EXIT_CODE=1
+  fi
+fi
+
+[ $EXIT_CODE -ne 0 ] && exit $EXIT_CODE
+
+# ── Check for console.log (warning only) ─────────────────────
+if [ -n "$CONSOLE_LOG_EXTENSIONS" ]; then
+  EXT_PATTERN="\.(${CONSOLE_LOG_EXTENSIONS})$"
+  STAGED_CODE=$(echo "$STAGED_FILES" | grep -E "$EXT_PATTERN" || true)
+
+  # Apply exclusions
+  if [ -n "$CONSOLE_LOG_EXCLUDE" ] && [ -n "$STAGED_CODE" ]; then
+    STAGED_CODE=$(echo "$STAGED_CODE" | grep -vE "$CONSOLE_LOG_EXCLUDE" || true)
+  fi
+
+  if [ -n "$STAGED_CODE" ]; then
+    # Build guard exclusion pattern
+    GUARD_GREP=""
+    if [ -n "$CONSOLE_LOG_GUARDS" ]; then
+      GUARD_GREP=$(echo "$CONSOLE_LOG_GUARDS" | tr '|' '\n' | while read -r g; do
+        printf " | grep -v '%s'" "$g"
+      done)
+    fi
+
+    CONSOLE_LOGS=$(eval "git diff --cached -- $STAGED_CODE | grep '^\+.*console\.log(' ${GUARD_GREP}" 2>/dev/null | head -5 || true)
+
+    if [ -n "$CONSOLE_LOGS" ]; then
+      echo ""
+      echo "  \033[33mWARNING:\033[0m Found console.log() in staged files:"
+      echo "$CONSOLE_LOGS" | head -5 | while read -r line; do
+        echo "    $line"
+      done
+      echo ""
+      echo "  Tip: Guard with a dev check or use console.error() for production logging."
+      echo ""
+    fi
+  fi
+fi
