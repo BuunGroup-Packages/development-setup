@@ -10,22 +10,15 @@
 
 ---
 
-## Prerequisites
+## Quick Install
 
-Install [just](https://github.com/casey/just) (a command runner):
+One command — installs `just`, clones the repo, and runs the full setup:
 
 ```bash
-# Linux
-curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to ~/.local/bin
-
-# macOS
-brew install just
-
-# Arch
-sudo pacman -S just
+curl -fsSL https://raw.githubusercontent.com/buun-group/development-setup/main/setup.sh | bash
 ```
 
-## Quick Install
+Or if you prefer to clone manually:
 
 ```bash
 git clone https://github.com/buun-group/development-setup.git
@@ -33,7 +26,9 @@ cd development-setup
 just install
 ```
 
-The installer walks you through everything: dependencies, Ollama, model profile selection, and PATH setup.
+The installer walks you through everything: `just`, system dependencies, Ollama, model profile selection, git hooks, and PATH setup.
+
+> **Windows users:** Run inside WSL2. Native Windows/PowerShell is not supported.
 
 ## Available Commands
 
