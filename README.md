@@ -12,7 +12,7 @@
 
 ## Quick Install
 
-One command — installs `just`, clones the repo, and runs the full setup:
+One command - installs `just`, clones the repo, and runs the full setup:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/buun-group/development-setup/main/setup.sh | bash
