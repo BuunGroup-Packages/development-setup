@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="https://buungroup.com/logo/logo.svg" alt="Buun Group" height="60" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.buungroup.com/brand/logo/buungroup-mark-on-dark.svg" />
+    <img src="https://assets.buungroup.com/brand/logo/buungroup-mark.svg" alt="Buun Group" width="60" height="60" />
+  </picture>
 </p>
 
 <h1 align="center">Development Setup</h1>
